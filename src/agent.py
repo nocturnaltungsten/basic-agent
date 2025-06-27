@@ -6,6 +6,7 @@ from typing import Any
 import lmstudio as lms
 
 from .config import AgentConfig
+from .dev_mode import DevModeTracker, is_dev_mode_enabled
 from .exceptions import AgentError, ToolError, UserCancellationError
 from .memory import MemoryManager
 from .models import get_model_info
@@ -29,6 +30,9 @@ class BasicAgent:
         self.memory = MemoryManager(config.memory_long_term_path, config.memory_short_term_cap)
         self.tools = dict(AVAILABLE_TOOLS)
         
+        # Initialize dev mode
+        self.dev_mode = DevModeTracker(enabled=is_dev_mode_enabled())
+        
         # Detect tool capability
         self.supports_native_tools = self._detect_tool_capability()
 
@@ -42,8 +46,31 @@ class BasicAgent:
             AgentError: If processing fails
         """
         try:
+            # Check for dev commands first
+            if self.dev_mode.enabled and user_input.startswith("!"):
+                self._handle_dev_command(user_input)
+                return
+            
             # Prepare context with memory
             memory_context = self.memory.get_memory_context()
+            
+            # Dev mode: analyze context before processing
+            if self.dev_mode.enabled:
+                context_stats = self.dev_mode.analyze_context(
+                    user_input, memory_context, 
+                    self.memory.short_term_memory, 
+                    self.memory.long_term_memory
+                )
+                
+                # Show context size info
+                print(f"🔧 Context: {context_stats.total_chars} chars (~{context_stats.estimated_tokens} tokens)")
+                
+                # Ask if user wants to see full prompt
+                if self._should_show_prompt():
+                    self._show_full_prompt(user_input, memory_context)
+                
+                # Log the request
+                self.dev_mode.log_request(context_stats)
             
             print("Thinking...")
 
@@ -179,12 +206,23 @@ Response:"""
                     tool_result = self.tools[tool_name].execute(**args)
                     result_parts.append(f"Tool {tool_name} result: {tool_result}")
                     
+                    # Dev mode: log successful tool call
+                    if self.dev_mode.enabled:
+                        self.dev_mode.log_tool_call(tool_name, args, tool_result, success=True)
+                        print(f"🔧 Tool call: {tool_name}({', '.join(f'{k}={v}' for k, v in args.items())})")
+                    
                     # Remove the tool call from response
                     tool_call_text = f"TOOL_CALL: {tool_name}({args_str})"
                     remaining_response = remaining_response.replace(tool_call_text, "").strip()
                     
                 except Exception as e:
-                    result_parts.append(f"Error executing {tool_name}: {e}")
+                    error_msg = f"Error executing {tool_name}: {e}"
+                    result_parts.append(error_msg)
+                    
+                    # Dev mode: log failed tool call
+                    if self.dev_mode.enabled:
+                        args = self._parse_tool_arguments(args_str) if args_str else {}
+                        self.dev_mode.log_tool_call(tool_name, args, "", success=False, error=str(e))
             else:
                 result_parts.append(f"Unknown tool: {tool_name}")
         
@@ -227,6 +265,143 @@ Response:"""
 
         return tool_functions
 
+    def _handle_dev_command(self, command: str) -> None:
+        """Handle dev mode commands.
+        
+        Args:
+            command: Dev command starting with !
+        """
+        cmd = command.lower().strip()
+        
+        if cmd == "!tokens":
+            self._show_token_stats()
+        elif cmd == "!memory":
+            self._show_memory_stats()
+        elif cmd == "!clear":
+            self._clear_short_term_memory()
+        elif cmd == "!stats":
+            self._show_detailed_stats()
+        elif cmd == "!help":
+            self._show_dev_help()
+        else:
+            print(f"Unknown dev command: {command}")
+            print("Type !help for available commands")
+    
+    def _show_token_stats(self) -> None:
+        """Show current session token statistics."""
+        stats = self.dev_mode.get_token_stats()
+        
+        print("🔧 TOKEN STATISTICS")
+        print(f"   Total requests: {stats['total_requests']}")
+        print(f"   Total estimated tokens: {stats['total_estimated_tokens']:,}")
+        print(f"   Average tokens/request: {stats['average_tokens_per_request']:.1f}")
+        print(f"   Session duration: {stats['session_duration_seconds']:.1f} seconds")
+        print(f"   Tokens per minute: {stats['tokens_per_minute']:.1f}")
+        print()
+    
+    def _show_memory_stats(self) -> None:
+        """Show current memory statistics."""
+        stats = self.dev_mode.get_memory_stats(
+            self.memory.short_term_memory, 
+            self.memory.long_term_memory
+        )
+        
+        print("🔧 MEMORY STATISTICS")
+        print(f"   Short-term: {stats['short_term_chars']:,} chars (~{stats['short_term_tokens']} tokens)")
+        print(f"   Long-term: {stats['long_term_entries']} entries, {stats['long_term_chars']:,} chars (~{stats['long_term_tokens']} tokens)")
+        print(f"   Total memory: {stats['total_memory_chars']:,} chars (~{stats['total_memory_tokens']} tokens)")
+        print()
+        
+        # Show memory content preview
+        if self.memory.short_term_memory:
+            preview = self.memory.short_term_memory[:200] + "..." if len(self.memory.short_term_memory) > 200 else self.memory.short_term_memory
+            print("   Short-term preview:")
+            print(f"   {preview}")
+            print()
+        
+        if self.memory.long_term_memory:
+            print("   Long-term memory:")
+            for key, value in self.memory.long_term_memory.items():
+                print(f"   {key}: {value}")
+            print()
+    
+    def _clear_short_term_memory(self) -> None:
+        """Clear short-term memory."""
+        old_size = len(self.memory.short_term_memory)
+        self.memory.clear_short_term()
+        print(f"🔧 Cleared short-term memory ({old_size:,} chars)")
+        print()
+    
+    def _show_detailed_stats(self) -> None:
+        """Show comprehensive context breakdown and analysis."""
+        # Get context breakdown
+        memory_context = self.memory.get_memory_context()
+        breakdown = self.dev_mode.get_context_breakdown(
+            "", memory_context, 
+            self.memory.short_term_memory, 
+            self.memory.long_term_memory
+        )
+        
+        # Get tool stats
+        tool_stats = self.dev_mode.get_tool_stats()
+        
+        print("🔧 DETAILED STATISTICS")
+        print()
+        
+        print("CONTEXT BREAKDOWN:")
+        print(f"   Memory context: {breakdown['current_request']['memory_context_chars']:,} chars (~{breakdown['current_request']['memory_context_tokens']} tokens)")
+        print(f"   Short-term: {breakdown['memory_breakdown']['short_term_chars']:,} chars (~{breakdown['memory_breakdown']['short_term_tokens']} tokens)")
+        print(f"   Long-term: {breakdown['memory_breakdown']['long_term_chars']:,} chars (~{breakdown['memory_breakdown']['long_term_tokens']} tokens)")
+        print()
+        
+        print("CONTEXT GROWTH:")
+        growth = breakdown['context_growth']
+        print(f"   Trend: {growth['trend']}")
+        print(f"   Average growth per request: {growth.get('average_growth_per_request', 0):.1f} chars")
+        print(f"   Current size: {growth.get('current_context_size', 0):,} chars")
+        print(f"   Peak size: {growth.get('peak_context_size', 0):,} chars")
+        print()
+        
+        print("TOOL USAGE:")
+        print(f"   Total calls: {tool_stats['total_tool_calls']}")
+        print(f"   Success rate: {tool_stats['success_rate']:.1%}")
+        print(f"   Successful: {tool_stats['successful_calls']}")
+        print(f"   Failed: {tool_stats['failed_calls']}")
+        
+        if tool_stats['tool_usage']:
+            print("   Per tool:")
+            for tool, usage in tool_stats['tool_usage'].items():
+                print(f"     {tool}: {usage['calls']} calls ({usage['successes']} success, {usage['failures']} failed)")
+        print()
+    
+    def _show_dev_help(self) -> None:
+        """Show available dev commands."""
+        print("🔧 DEV MODE COMMANDS")
+        print("   !tokens  - Show current session token statistics")
+        print("   !memory  - Display current memory state and sizes")
+        print("   !clear   - Clear short-term memory")
+        print("   !stats   - Show detailed context breakdown and analysis")
+        print("   !help    - Show this help message")
+        print()
+    
+    def _should_show_prompt(self) -> bool:
+        """Ask user if they want to see the full prompt."""
+        try:
+            response = input("🔧 Show full prompt? (y/N): ").lower().strip()
+            return response in ('y', 'yes')
+        except (KeyboardInterrupt, EOFError):
+            return False
+    
+    def _show_full_prompt(self, user_input: str, memory_context: str) -> None:
+        """Show the full prompt being sent to the model."""
+        full_prompt = f"{user_input}\n{memory_context}" if memory_context else user_input
+        
+        print("🔧 FULL PROMPT:")
+        print("=" * 50)
+        print(full_prompt)
+        print("=" * 50)
+        print()
+
     def _detect_tool_capability(self) -> bool:
         """Detect if the current model supports native tool calling."""
         try:
@@ -245,6 +420,9 @@ Response:"""
 
     def run(self) -> None:
         """Run the main agent interaction loop."""
+        # Show dev mode status
+        self.dev_mode.print_startup_status()
+        
         print("Basic Agent started. Type 'quit' or 'exit' to stop.")
         print("Type your message and press Enter.\n")
 

@@ -13,12 +13,15 @@ __author__ = "Basic Agent Project"
 
 from .agent import BasicAgent
 from .config import AgentConfig, load_config
+from .dev_mode import DevModeTracker, is_dev_mode_enabled
 from .exceptions import AgentError, ConfigurationError, ModelError, ToolError
 
 __all__ = [
     "BasicAgent",
     "AgentConfig",
     "load_config",
+    "DevModeTracker",
+    "is_dev_mode_enabled",
     "AgentError",
     "ConfigurationError",
     "ModelError",
