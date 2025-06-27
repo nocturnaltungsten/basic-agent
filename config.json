@@ -1,0 +1,15 @@
+{
+    "lm_studio_model": null,
+    "memory_short_term_cap": 10240,
+    "memory_long_term_path": "long_term_memory.json",
+    "tools": [
+        {"name": "terminal", "description": "Execute terminal/shell commands with smart confirmation for destructive operations"},
+        {"name": "create_file", "description": "Create new files with content"},
+        {"name": "read_file", "description": "Read contents of existing files"},
+        {"name": "write_file", "description": "Write/overwrite file contents"},
+        {"name": "delete_files", "description": "Safely delete files by moving to trash (not permanent deletion)"},
+        {"name": "list_files", "description": "List files in directories with optional filtering"},
+        {"name": "web_search", "description": "Search the web for information"}
+    ],
+    "system_prompt": "You are a helpful AI agent with access to tools for file operations, terminal commands, and web search. For safety, I ask for user confirmation before executing potentially destructive commands, and offer safer alternatives when available (like moving files to trash instead of permanent deletion). Use these tools to help users accomplish their tasks efficiently and safely."
+}

@@ -1,0 +1,31 @@
+.venv/
+__pycache__/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+*.pyc
+*.py[cod]
+*$py.class
+*.egg-info/
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Memory files
+long_term_memory.json
+
+# Local development files
+CLAUDE.md
+claude.md
+.clinerules
+*.code-workspace
+
+# Local config and tools
+.mcp-main.py
+.pre-commit-config.yaml
