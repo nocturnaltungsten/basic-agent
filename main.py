@@ -26,7 +26,7 @@ def main() -> None:
         config.lm_studio_model = model_name
 
         # Create and run agent
-        agent = BasicAgent(llm, config)
+        agent = BasicAgent(llm, config, model_name)
         agent.run()
 
     except ConfigurationError as e:

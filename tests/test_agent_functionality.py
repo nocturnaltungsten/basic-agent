@@ -37,8 +37,8 @@ def test_agent_initialization():
     mock_llm = Mock()
     config = AgentConfig()
 
-    with patch("src.memory.MemoryManager"):
-        agent = BasicAgent(mock_llm, config)
+    with patch("src.memory.MemoryManager"), patch("src.agent.get_model_info"):
+        agent = BasicAgent(mock_llm, config, "test-model")
         assert agent.llm == mock_llm
         assert agent.config == config
 

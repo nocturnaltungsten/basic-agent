@@ -3,6 +3,7 @@
 import json
 import os
 import subprocess
+from typing import Any
 
 import lmstudio as lms
 
@@ -32,6 +33,28 @@ def list_available_models() -> list[dict[str, str]]:
         raise ModelError(f"Failed to parse model list: {e}") from e
     except subprocess.TimeoutExpired as e:
         raise ModelError("Timeout while listing models") from e
+
+
+def get_model_info(model_key: str) -> dict[str, Any]:
+    """Get detailed information about a specific model.
+    
+    Args:
+        model_key: The model key to look up
+        
+    Returns:
+        Dictionary with model information including tool capability
+        
+    Raises:
+        ModelError: If model not found or lookup fails
+    """
+    try:
+        models = get_available_models()
+        for model in models:
+            if model.get("modelKey") == model_key:
+                return model
+        raise ModelError(f"Model '{model_key}' not found")
+    except Exception as e:
+        raise ModelError(f"Failed to get model info: {e}") from e
 
 
 def filter_llm_models(models: list[dict[str, str]]) -> list[dict[str, str]]:
