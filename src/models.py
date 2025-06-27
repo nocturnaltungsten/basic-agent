@@ -48,7 +48,7 @@ def get_model_info(model_key: str) -> dict[str, Any]:
         ModelError: If model not found or lookup fails
     """
     try:
-        models = get_available_models()
+        models = list_available_models()
         for model in models:
             if model.get("modelKey") == model_key:
                 return model

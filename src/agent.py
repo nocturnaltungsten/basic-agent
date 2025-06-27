@@ -140,7 +140,15 @@ User request: {user_input}
 Response:"""
 
         # Get LLM response
-        response = self.llm.respond(enhanced_prompt)
+        prediction_result = self.llm.respond(enhanced_prompt)
+        
+        # Extract text from PredictionResult
+        if hasattr(prediction_result, 'content'):
+            response = str(prediction_result.content)
+        elif hasattr(prediction_result, 'text'):
+            response = str(prediction_result.text)
+        else:
+            response = str(prediction_result)
         
         # Parse and execute tool calls
         return self._parse_and_execute_tool_calls(response)
@@ -226,8 +234,9 @@ Response:"""
             supports_tools = model_info.get("trainedForToolUse", False)
             print(f"Model {self.model_key}: Native tool support = {supports_tools}")
             return supports_tools
-        except Exception:
-            print("Could not detect tool capability, defaulting to prompt-based approach")
+        except Exception as e:
+            print(f"Could not detect tool capability: {e}")
+            print("Defaulting to prompt-based approach")
             return False
 
     def _is_tool_metadata(self, text: str) -> bool:
