@@ -65,7 +65,10 @@ class DevModeTracker:
         Returns:
             Estimated token count
         """
-        return len(text) // self._chars_per_token
+        if not text:
+            return 0
+        # Ensure at least 1 token for non-empty text
+        return max(1, len(text) // self._chars_per_token)
     
     def analyze_context(self, user_input: str, memory_context: str, 
                        short_term_memory: str, long_term_memory: Dict[str, Any]) -> ContextStats:
@@ -90,7 +93,9 @@ class DevModeTracker:
         )
         
         stats.total_chars = stats.base_prompt_chars + stats.memory_context_chars
-        stats.estimated_tokens = self.estimate_tokens(str(stats.total_chars))
+        # Calculate tokens from the actual total text length
+        total_text = user_input + memory_context
+        stats.estimated_tokens = self.estimate_tokens(total_text)
         
         return stats
     
