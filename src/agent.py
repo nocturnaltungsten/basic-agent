@@ -37,10 +37,10 @@ class BasicAgent:
         try:
             # Prepare context with memory
             memory_context = self.memory.get_memory_context()
-            full_prompt = f"{user_input}\\n{memory_context}" if memory_context else user_input
+            full_prompt = f"{user_input}\n{memory_context}" if memory_context else user_input
 
-            # Get available tool functions for LLM
-            available_tool_functions = list(self.tools.values())
+            # Convert tool objects to functions for LLM
+            available_tool_functions = self._prepare_tool_functions()
 
             print("Thinking...")
 
@@ -82,7 +82,7 @@ class BasicAgent:
             # Combine all response parts
             full_response = "".join(response_parts) if response_parts else "No response generated"
 
-            print(f"\\nAgent Response: {full_response}")
+            print(f"\nAgent Response: {full_response}")
 
             # Update memory
             self.memory.update_memory(user_input, full_response)
@@ -94,6 +94,25 @@ class BasicAgent:
         except Exception as e:
             raise AgentError(f"Error processing input: {e}") from e
 
+    def _prepare_tool_functions(self) -> list:
+        """Convert tool objects to functions that LM Studio can call."""
+        tool_functions = []
+        
+        for name, tool in self.tools.items():
+            # Create a function that wraps the tool's execute method
+            def create_tool_function(tool_obj, tool_name):
+                def tool_function(**kwargs):
+                    return tool_obj.execute(**kwargs)
+                
+                # Set function name and docstring for LM Studio
+                tool_function.__name__ = tool_name
+                tool_function.__doc__ = tool_obj.description
+                return tool_function
+            
+            tool_functions.append(create_tool_function(tool, name))
+        
+        return tool_functions
+
     def _is_tool_metadata(self, text: str) -> bool:
         """Check if text is tool call metadata that should be filtered out."""
         return text.startswith("ToolCallRequestData") or text.startswith("ToolCallResultData")
@@ -101,7 +120,7 @@ class BasicAgent:
     def run(self) -> None:
         """Run the main agent interaction loop."""
         print("Basic Agent started. Type 'quit' or 'exit' to stop.")
-        print("Type your message and press Enter.\\n")
+        print("Type your message and press Enter.\n")
 
         while True:
             try:
