@@ -97,20 +97,20 @@ class BasicAgent:
     def _prepare_tool_functions(self) -> list:
         """Convert tool objects to functions that LM Studio can call."""
         tool_functions = []
-        
+
         for name, tool in self.tools.items():
             # Create a function that wraps the tool's execute method
             def create_tool_function(tool_obj, tool_name):
                 def tool_function(**kwargs):
                     return tool_obj.execute(**kwargs)
-                
+
                 # Set function name and docstring for LM Studio
                 tool_function.__name__ = tool_name
                 tool_function.__doc__ = tool_obj.description
                 return tool_function
-            
+
             tool_functions.append(create_tool_function(tool, name))
-        
+
         return tool_functions
 
     def _is_tool_metadata(self, text: str) -> bool:
